@@ -60,7 +60,7 @@ To enable SSH login filter, you need to edit `/etc/pam.d/sshd` on each **worker*
 In `/etc/pam.d/sshd`, after the last `account XXX XXX` line, add a new line:
 
 ```bash
-account required pam_exec.so log=/log.txt /usr/lib/kiwi/ssh_checker.py
+account required pam_exec.so /usr/lib/kiwi/ssh_checker.py
 ```
 
 You can check if works properly. On the "master" node, run
