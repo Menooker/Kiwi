@@ -49,7 +49,7 @@ except:
     exit(0)
 if user in bypass_users:
     exit(0)
-if user == spl[0]:
+if user == spl[0] or "init:"+user == spl[0]:
     exit(0)
 else:
     print("Kiwi: rejecting ssh login", user,  spl[0])

@@ -7,7 +7,7 @@ import os
 from os import O_RDWR
 import time
 import subprocess
-from datetime import datetime
+import datetime
 
 install_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,7 +22,7 @@ run_parser = sub_parsers.add_parser("run")
 def add_run_args(subparser):
     subparser.add_argument("--user", "-u", type=str, default=None)
     subparser.add_argument("--worker", "-w", type=str, required=True)
-    subparser.add_argument("--time", "-t", type=int, default=3600)
+    subparser.add_argument("--time", "-t", type=str, default=3600)
 
 
 add_run_args(alloc_parser)
@@ -42,7 +42,21 @@ def get_user():
         import getpass
         args.user = getpass.getuser()
     return args.user
-    
+
+
+def get_arg_time():
+    if isinstance(args.time, str):
+        spl = [float(i) for i in args.time.split(":")]
+        if len(spl) < 1 or len(spl) > 4:
+            print("Bad time format")
+            exit(1)
+        unit = [3600*24, 3600, 60, 1]
+        res = 0
+        for idx, i in enumerate(spl):
+            res += i * unit[idx + 4 - len(spl)]
+        args.time = int(res)
+    return args.time
+
 
 def get_shared_path():
     if args.shared_path:
@@ -51,6 +65,7 @@ def get_shared_path():
         with open(os.path.join(install_path, "local_config.txt")) as f:
             path = f.read().strip()
     return path
+
 
 def load_config():
     path = get_shared_path()
@@ -77,8 +92,23 @@ def read_status(path):
     return (spl[0], int(spl[1]), float(spl[2]), int(spl[3]))
 
 
+def do_kill_init(status_file_path: str, config: dict):
+    fd = os.open(status_file_path, O_RDWR)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    user, jobid, start, duration = read_status(status_file_path)
+    if user != "init:"+get_user():
+        print("do_kill_init: The node is not initializing for this user")
+        exit(1)
+    updated_status = "{} {} {} {}".format(
+        "[idle]", jobid, start, duration)
+    with open(status_file_path, "w") as f:
+        f.write(updated_status)
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    os.close(fd)
+
+
 def do_alloc(status_file_path: str, config: dict, run: bool):
-    if args.time < 0:
+    if get_arg_time() < 0:
         print("Bad job duration")
         exit(0)
     user, jobid, start, duration = read_status(status_file_path)
@@ -94,22 +124,30 @@ def do_alloc(status_file_path: str, config: dict, run: bool):
         print("The node is not idle")
         exit(1)
     updated_status = "{} {} {} {}".format(
-        get_user(), jobid+1, time.time(), args.time)
+        "init:" + get_user(), jobid+1, time.time(), get_arg_time())
     with open(status_file_path, "w") as f:
         f.write(updated_status)
     fcntl.flock(fd, fcntl.LOCK_UN)
+    os.close(fd)
     worker_info = config["workers"][args.worker]
-    if not run:
-        subprocess.run('ssh {user}@{host} -p{port} "nohup {install}/housekeeper {user} {time} {shared_path}/{worker}/status.txt 1>/dev/null 2>/dev/null &"'.format(
-            user=get_user(), host=worker_info[0], port=worker_info[1], time=args.time, shared_path=config["worker_shared_path"], install=config["worker_install_path"], worker=args.worker), shell=True)
-    else:
-        subprocess.run('ssh -t {user}@{host} -p{port} "nohup {install}/housekeeper {user} {time} {shared_path}/{worker}/status.txt 1>/dev/null 2>/dev/null &\n bash\n {install}/housekeeper --kill {user}"'.format(
-            user=get_user(), host=worker_info[0], port=worker_info[1], time=args.time, shared_path=config["worker_shared_path"], install=config["worker_install_path"], worker=args.worker), shell=True)
+    try:
+        if not run:
+            subprocess.run('ssh {user}@{host} -p{port} "nohup {install}/housekeeper {user} {time} {shared_path}/{worker}/status.txt 1>/dev/null 2>/dev/null &"'.format(
+                user=get_user(), host=worker_info[0], port=worker_info[1], time=get_arg_time(), shared_path=config["worker_shared_path"], install=config["worker_install_path"], worker=args.worker), shell=True, check=True)
+        else:
+            subprocess.run('ssh -t {user}@{host} -p{port} "nohup {install}/housekeeper {user} {time} {shared_path}/{worker}/status.txt 1>/dev/null 2>/dev/null &\n bash\n {install}/housekeeper --kill {user}"'.format(
+                user=get_user(), host=worker_info[0], port=worker_info[1], time=get_arg_time(), shared_path=config["worker_shared_path"], install=config["worker_install_path"], worker=args.worker), shell=True, check=True)
+    except:
+        print("Failed to alloc. Cleaning up the state")
+        do_kill_init(status_file_path, config)
 
 
 def do_kill(status_file_path: str, config: dict):
     worker_info = config["workers"][args.worker]
     user, jobid, start, duration = read_status(status_file_path)
+    if user == "init:"+get_user():
+        do_kill_init(status_file_path, config)
+        exit(0)
     if user != get_user():
         print("The node is not allocated by target user")
         exit(1)
@@ -124,12 +162,12 @@ def list_info(shared_path: str):
             path = os.path.join(filename.path, "status.txt")
             if os.path.exists(path):
                 user, jobid, start, duration = read_status(path)
-                starttime = datetime.fromtimestamp(
+                starttime = datetime.datetime.fromtimestamp(
                     start).strftime('%Y-%m-%d %H:%M:%S')
                 node_name = os.path.basename(filename.path)
                 if user != "[idle]":
                     print("{}\t{}\t{}\t{}\t{}".format(
-                        node_name, user, jobid, starttime, duration))
+                        node_name, user, jobid, starttime, str(datetime.timedelta(seconds=duration))))
                 else:
                     print("{}\t{}".format(node_name, user))
 

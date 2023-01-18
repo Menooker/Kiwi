@@ -66,7 +66,7 @@ def add():
     os.chmod(status_path, 0o666)
 
     with open(config_path,'w') as f:
-        json.dump(config, f)
+        json.dump(config, f, indent=4)
 
 if args.command == "init-master":
     init()

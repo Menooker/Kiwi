@@ -17,7 +17,7 @@ import sys
 
 if sys.argv[1] == "--kill":
     user = sys.argv[2]
-    with open("/tmp/{}.pid".format(user)) as f:
+    with open("/tmp/kiwi-{}.pid".format(user)) as f:
         pid = int(f.read())
         os.kill(pid, signal.SIGUSR2)
     exit(0)
@@ -31,11 +31,26 @@ user = sys.argv[1]
 duration = int(sys.argv[2])
 status_file = sys.argv[3]
 
-with open("/tmp/{}.pid".format(user), 'w') as f:
-    f.write(str(os.getpid()))
+def update_to_allocated():
+    fd = os.open(status_file, O_RDWR)
+    print("open done")
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    with open(status_file) as f:
+        old_status = f.read()
+    if not old_status.startswith("init:"+user):
+        print("Not initializing")
+        exit(1)
+    old_status = old_status[len("init:"):]
+    with open(status_file, 'w') as f:
+        f.write(old_status)
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    os.close(fd)
+    return old_status
 
-with open(status_file) as f:
-    old_status = f.read()
+old_status = update_to_allocated()
+
+with open("/tmp/kiwi-{}.pid".format(user), 'w') as f:
+    f.write(str(os.getpid()))
 
 wait_done = False
 def kill_process():
@@ -66,6 +81,7 @@ def kill_process():
     with open(status_file, 'w') as f:
         f.write(" ".join(spl))
     fcntl.flock(fd, fcntl.LOCK_UN)
+    os.unlink("/tmp/kiwi-{}.pid".format(user))
 
 def signal_handler(sig, frame):
     print('Early stop')
@@ -88,4 +104,3 @@ while duration > 0:
         exit(0)
 wait_done=True
 kill_process()
-os.unlink("/tmp/{}.pid".format(user))
