@@ -156,7 +156,7 @@ def do_kill(status_file_path: str, config: dict):
 
 
 def list_info(shared_path: str):
-    print("Node\tUser\tJob Id\tStart\tDuration")
+    print("{:25}{:15}{:10}{:25}{:10}".format("Node", "User", "Job ID", "Start", "Duration"))
     for filename in os.scandir(shared_path):
         if filename.is_dir():
             path = os.path.join(filename.path, "status.txt")
@@ -166,10 +166,9 @@ def list_info(shared_path: str):
                     start).strftime('%Y-%m-%d %H:%M:%S')
                 node_name = os.path.basename(filename.path)
                 if user != "[idle]":
-                    print("{}\t{}\t{}\t{}\t{}".format(
-                        node_name, user, jobid, starttime, str(datetime.timedelta(seconds=duration))))
+                    print("{node:25}{curuser:15}{id:10}{start:25}{duration:10}".format(node=node_name, curuser=user, id=str(jobid), start=starttime, duration=str(datetime.timedelta(seconds=duration))))
                 else:
-                    print("{}\t{}".format(node_name, user))
+                    print("{node:25}{curuser:15}".format(node=node_name, curuser=user))
 
 
 def main():
