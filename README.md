@@ -39,6 +39,8 @@ sudo kiwi-manage init-master
 
 This will initialize the shared state directory.
 
+If you would like to change the timezone of the kiwi cluster, please edit `/nfs/kiwi/config.json` and change the `"timezone": 8` line. By default, the timezone is `+8`.
+
 To add a node, run
 
 ```bash
@@ -46,6 +48,12 @@ sudo kiwi-manage add-node --name {host_name} --host {ip_or_host} --port {port}
 ```
 
 Note that if you log into a node using `ssh user@aaa.company.com`, usually `{host_name}` above should be "aaa" and `{ip_or_host}` above should be `aaa.company.com`.
+
+To add a node and let it only accept reservation during limited time ranges, run
+
+```bash
+sudo kiwi-manage add-node --name {host_name} --host {ip_or_host} --port {port} --time hh:mm-hh:mm[,hh:mm-hh:mm,...]
+```
 
 Please also edit `/nfs/kiwi/config.json` and change the `worker_shared_path` field. In our example, it should be
 
