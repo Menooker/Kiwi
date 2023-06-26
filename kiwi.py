@@ -129,10 +129,19 @@ def parse_reserve_duration(dur: str, now: datetime.datetime):
         fmt = "%H:%M"
         start = datetime.datetime.strptime(spl[0], fmt)
         end = datetime.datetime.strptime(spl[1], fmt)
-        start=start.replace(year=now.year, month=now.month, day = now.day, tzinfo = now.tzinfo)
-        end=end.replace(year=now.year, month=now.month, day = now.day, tzinfo = now.tzinfo)
+        start = start.replace(
+            year=now.year, month=now.month, day=now.day, tzinfo=now.tzinfo
+        )
+        end = end.replace(
+            year=now.year, month=now.month, day=now.day, tzinfo=now.tzinfo
+        )
         if start > end:
-            ret.append((datetime.datetime(now.year, now.month, now.day, tzinfo = now.tzinfo), end))
+            ret.append(
+                (
+                    datetime.datetime(now.year, now.month, now.day, tzinfo=now.tzinfo),
+                    end,
+                )
+            )
             end += datetime.timedelta(days=1)
         ret.append((start, end))
     return ret
