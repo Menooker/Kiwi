@@ -86,6 +86,7 @@ def get_worker_info_and_status_path():
             if found_name:
                 print("Ambiguous worker name, candidates: ", found_name, name)
                 exit(1)
+            found_name = name
     if not found_name:
         print("Worker name not found:", args.worker)
         exit(1)
@@ -128,11 +129,10 @@ def parse_reserve_duration(dur: str, now: datetime.datetime):
         fmt = "%H:%M"
         start = datetime.datetime.strptime(spl[0], fmt)
         end = datetime.datetime.strptime(spl[1], fmt)
-        now_days = now.year, now.month, now.day
-        start.year, start.month, start.day = now_days
-        end.year, end.month, end.day = now_days
+        start=start.replace(year=now.year, month=now.month, day = now.day, tzinfo = now.tzinfo)
+        end=end.replace(year=now.year, month=now.month, day = now.day, tzinfo = now.tzinfo)
         if start > end:
-            ret.append((datetime.datetime(now.year, now.month, now.day), end))
+            ret.append((datetime.datetime(now.year, now.month, now.day, tzinfo = now.tzinfo), end))
             end += datetime.timedelta(days=1)
         ret.append((start, end))
     return ret
@@ -144,7 +144,7 @@ def do_alloc(status_file_path: str, config: dict, run: bool):
         exit(0)
     worker_info = config["workers"][args.worker]
     timezone = config.get("timezone", 8)
-    tz = datetime.timezone(-datetime.timedelta(hours=timezone))
+    tz = datetime.timezone(datetime.timedelta(hours=timezone))
     now = datetime.datetime.now(tz)
     if len(worker_info) > 2:
         durations = parse_reserve_duration(worker_info[2], now)
@@ -232,7 +232,7 @@ def do_kill(status_file_path: str, config: dict):
 
 def list_info(shared_path: str, config: dict):
     timezone = config.get("timezone", 8)
-    tz = datetime.timezone(-datetime.timedelta(hours=timezone))
+    tz = datetime.timezone(datetime.timedelta(hours=timezone))
     print(
         "{:25}{:15}{:10}{:25}{:10}".format(
             "Node", "User", "Job ID", "Start", "Duration"
