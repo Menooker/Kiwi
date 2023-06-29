@@ -12,6 +12,7 @@ install_path = os.path.dirname(os.path.realpath(__file__))
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--shared-path", default=None)
+parser.add_argument("--partition", "-p", default=None)
 sub_parsers = parser.add_subparsers(dest="command")
 sub_parsers.required = True
 init_parser = sub_parsers.add_parser("init-master")
@@ -20,6 +21,11 @@ add_parser.add_argument("--name", type=str, required=True)
 add_parser.add_argument("--host", type=str, required=True)
 add_parser.add_argument("--port", type=int, required=True)
 add_parser.add_argument("--time", type=str, default=None)
+add_parser.add_argument("--label", type=str, default="")
+
+add_parser = sub_parsers.add_parser("partition")
+add_parser.add_argument("--path", type=str, required=True)
+add_parser.add_argument("--label", type=str, required=True)
 
 del_parser = sub_parsers.add_parser("del-node")
 args = parser.parse_args()
@@ -30,7 +36,19 @@ def get_shared_path():
         path = args.shared_path
     else:
         with open(os.path.join(install_path, "local_config.txt")) as f:
-            path = f.read().strip()
+            paths = f.readlines()
+            if not args.partition:
+                path = paths[0].strip().split(":")[0]
+            else:
+                path = None
+                for line in paths:
+                    p, label = line.strip().split(":")
+                    if label == args.partition:
+                        path = p
+                        break
+                if not path:
+                    print("Cannot find the partition in ", paths)
+                    exit(1)
     return path
 
 
@@ -39,6 +57,13 @@ def init():
     os.makedirs(path)
     os.chmod(path, 0o755)
     config_path = os.path.join(path, "config.json")
+    if os.path.exists(config_path):
+        print(
+            "The file ",
+            config_path,
+            "exists. Have you initialized before? To reset previous installation, please delete this file.",
+        )
+        exit(1)
     with open(config_path, "w") as f:
         f.write(
             """{
@@ -62,9 +87,9 @@ def add():
     config_path = os.path.join(path, "config.json")
     with open(config_path) as f:
         config = json.load(f)
-    line = [args.host, args.port]
+    line = [args.host, args.port, "", args.label]
     if args.time:
-        line.append(args.time)
+        line[2] = args.time
     config["workers"][args.name] = line
     dir_path = os.path.join(path, args.name)
     os.makedirs(dir_path)
@@ -79,7 +104,39 @@ def add():
         json.dump(config, f, indent=4)
 
 
+def partition():
+    with open(os.path.join(install_path, "local_config.txt")) as f:
+        paths = f.readlines()
+        found = False
+        for idx, line in enumerate(paths):
+            spl = line.strip().split(":")
+            if len(spl) != 1 and len(spl) > 2:
+                print(
+                    "Bad file content",
+                    os.path.join(install_path, "local_config.txt"),
+                    ": ",
+                    line,
+                )
+            if len(spl) == 1:
+                label = ""
+                path = spl[0]
+            else:
+                path, label = spl
+            if path == args.path:
+                label = args.label
+                paths[idx] = "{}:{}\n".format(path, label)
+                found = True
+                break
+        if not found:
+            paths.append("{}:{}\n".format(args.path, args.label))
+
+    with open(os.path.join(install_path, "local_config.txt"), "w") as f:
+        f.write("".join(paths))
+
+
 if args.command == "init-master":
     init()
 elif args.command == "add-node":
     add()
+elif args.command == "partition":
+    partition()

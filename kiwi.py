@@ -11,12 +11,16 @@ import datetime
 
 install_path = os.path.dirname(os.path.realpath(__file__))
 
+version = "0.0.1"
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--shared-path", default=None)
+parser.add_argument("--partition", "-p", default=None)
 sub_parsers = parser.add_subparsers(dest="command")
 sub_parsers.required = True
 alloc_parser = sub_parsers.add_parser("alloc")
 run_parser = sub_parsers.add_parser("run")
+ver_parser = sub_parsers.add_parser("version")
 
 
 def add_run_args(subparser):
@@ -59,17 +63,29 @@ def get_arg_time():
     return args.time
 
 
-def get_shared_path():
+def get_shared_path(partition: str):
     if args.shared_path:
         path = args.shared_path
     else:
         with open(os.path.join(install_path, "local_config.txt")) as f:
-            path = f.read().strip()
+            paths = f.readlines()
+            if not partition:
+                path = paths[0].strip().split(":")[0]
+            else:
+                path = None
+                for line in paths:
+                    p, label = line.strip().split(":")
+                    if label == partition:
+                        path = p
+                        break
+                if not path:
+                    print("Cannot find the partition in ", paths)
+                    exit(1)
     return path
 
 
-def load_config():
-    path = get_shared_path()
+def load_config(partition: str):
+    path = get_shared_path(partition)
     import json
 
     cfg_path = os.path.join(path, "config.json")
@@ -78,8 +94,8 @@ def load_config():
     return path, config
 
 
-def get_worker_info_and_status_path():
-    shared_path, config = load_config()
+def get_worker_info_and_status_path(partition: str):
+    shared_path, config = load_config(partition)
     found_name = None
     for name, values in config["workers"].items():
         if args.worker in name:
@@ -155,7 +171,7 @@ def do_alloc(status_file_path: str, config: dict, run: bool):
     timezone = config.get("timezone", 8)
     tz = datetime.timezone(datetime.timedelta(hours=timezone))
     now = datetime.datetime.now(tz)
-    if len(worker_info) > 2:
+    if worker_info[2]:
         durations = parse_reserve_duration(worker_info[2], now)
         endtime = now + datetime.timedelta(seconds=get_arg_time())
         ok = False
@@ -200,6 +216,11 @@ def do_alloc(status_file_path: str, config: dict, run: bool):
                 shell=True,
                 check=True,
             )
+            print(
+                "You can login via: ssh {user}@{host} -p{port}".format(
+                    user=get_user(), host=worker_info[0], port=worker_info[1]
+                )
+            )
         else:
             subprocess.run(
                 'ssh -t {user}@{host} -p{port} "nohup {install}/housekeeper {user} {time} {shared_path}/{worker}/status.txt 1>/dev/null 2>/dev/null &\n bash\n {install}/housekeeper --kill {user}"'.format(
@@ -243,8 +264,8 @@ def list_info(shared_path: str, config: dict):
     timezone = config.get("timezone", 8)
     tz = datetime.timezone(datetime.timedelta(hours=timezone))
     print(
-        "{:25}{:15}{:10}{:25}{:10}".format(
-            "Node", "User", "Job ID", "Start", "Duration"
+        "{:23}{:18}{:14}{:9}{:25}{:10}".format(
+            "Node", "Label", "User", "Job ID", "Start", "Duration"
         )
     )
     for filename in os.scandir(shared_path):
@@ -256,10 +277,12 @@ def list_info(shared_path: str, config: dict):
                     "%Y-%m-%d %H:%M:%S"
                 )
                 node_name = os.path.basename(filename.path)
+                label = config["workers"][node_name][3]
                 if user != "[idle]":
                     print(
-                        "{node:25}{curuser:15}{id:10}{start:25}{duration:10}".format(
+                        "{node:23}{label:18}{curuser:14}{id:9}{start:25}{duration:10}".format(
                             node=node_name,
+                            label=label,
                             curuser=user,
                             id=str(jobid),
                             start=starttime,
@@ -267,22 +290,51 @@ def list_info(shared_path: str, config: dict):
                         )
                     )
                 else:
-                    print("{node:25}{curuser:15}".format(node=node_name, curuser=user))
+                    print(
+                        "{node:23}{label:18}{curuser:14}".format(
+                            node=node_name, label=label, curuser=user
+                        )
+                    )
+
+
+def list_partitions():
+    ret = []
+    path_file = os.path.join(install_path, "local_config.txt")
+    with open(path_file) as f:
+        paths = f.readlines()
+        for path in paths:
+            spl = path.strip().split(":")
+            if len(spl) == 1:
+                ret.append("")
+                continue
+            elif len(spl) != 2:
+                print("Bad path config in", path_file, ":", paths)
+            ret.append(spl[1])
+    return ret
 
 
 def main():
+    if args.command == "version":
+        print(version)
     if args.command == "alloc":
-        path, config = get_worker_info_and_status_path()
+        path, config = get_worker_info_and_status_path(args.partition)
         do_alloc(path, config, False)
     elif args.command == "kill":
-        path, config = get_worker_info_and_status_path()
+        path, config = get_worker_info_and_status_path(args.partition)
         do_kill(path, config)
     elif args.command == "run":
-        path, config = get_worker_info_and_status_path()
+        path, config = get_worker_info_and_status_path(args.partition)
         do_alloc(path, config, True)
     elif args.command == "info":
-        path, config = load_config()
-        list_info(path, config)
+        if args.partition is None or args.partition == "all":
+            plist = list_partitions()
+        else:
+            plist = [args.partition]
+        for partition in plist:
+            path, config = load_config(partition)
+            if len(plist) != 1:
+                print("Partition", partition, ":")
+            list_info(path, config)
 
 
 if __name__ == "__main__":

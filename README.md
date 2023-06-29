@@ -44,7 +44,7 @@ If you would like to change the timezone of the kiwi cluster, please edit `/nfs/
 To add a node, run
 
 ```bash
-sudo kiwi-manage add-node --name {host_name} --host {ip_or_host} --port {port}
+sudo kiwi-manage add-node --name {host_name} --host {ip_or_host} --port {port} [--label={lable}]
 ```
 
 Note that if you log into a node using `ssh user@aaa.company.com`, usually `{host_name}` above should be "aaa" and `{ip_or_host}` above should be `aaa.company.com`.
@@ -131,3 +131,44 @@ kiwi kill -u {username} -w {host}
 ```
 
 This will kill the processes of that user on the node and the node will be idle.
+
+## Managing multiple partitions
+
+Kiwi can manage multiple clusters (partitions) on a single master node. A partition is managed by a NFS shared directory. To add a parition in Kiwi, you need to first mount the NFS directory of the partition in local file system. Then you need to add it to Kiwi's local configuration via
+
+```
+sudo kiwi-manage partition --path={NFS path} --label={partition name}
+```
+
+If the partition has already been initialized by `kiwi-manage init-master`, you can see the partition in
+
+```
+kiwi info
+```
+
+If the partition NFS directory has not been initialized yet, you can initialize it via
+
+```
+sudo kiwi-manage -p {partition_name} init-master
+```
+
+or
+
+```
+sudo kiwi-manage --shared-path {partition NFS path} init-master
+```
+
+Most `kiwi` and `kiwi-manage` commands has an optional `-p` switch to specify which partition to use. If no `-p` option is given, `kiwi-manage` and `kiwi` will use the first partition listed in `local_config.txt` of the installed path.
+
+For example, to list node states of parition "p1":
+
+```
+kiwi -p p1 info
+```
+
+To allocate node in partition "p1":
+
+```
+kiwi -p p1 alloc -w node-name 
+```
+
