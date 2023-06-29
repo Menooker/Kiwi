@@ -39,6 +39,8 @@ sudo kiwi-manage init-master
 
 This will initialize the shared state directory.
 
+If you would like to change the timezone of the kiwi cluster, please edit `/nfs/kiwi/config.json` and change the `"timezone": 8` line. By default, the timezone is `UTC+8`.
+
 To add a node, run
 
 ```bash
@@ -47,11 +49,34 @@ sudo kiwi-manage add-node --name {host_name} --host {ip_or_host} --port {port}
 
 Note that if you log into a node using `ssh user@aaa.company.com`, usually `{host_name}` above should be "aaa" and `{ip_or_host}` above should be `aaa.company.com`.
 
+To add a node and let it only accept reservation during limited time ranges, run
+
+```bash
+sudo kiwi-manage add-node --name {host_name} --host {ip_or_host} --port {port} --time hh:mm-hh:mm[,hh:mm-hh:mm,...]
+```
+
 Please also edit `/nfs/kiwi/config.json` and change the `worker_shared_path` field. In our example, it should be
 
 ```
 "worker_shared_path": "/nfs/kiwi/"
 ```
+
+Please check if the "housekeeper" of Kiwi works. A common issue is that the `psutil` python module is not properly installed. This might be an issue of SELinux. You can check if it is working by running
+
+```
+/usr/lib/kiwi/housekeeper
+```
+
+It is **OK** to fail like:
+
+```
+Traceback (most recent call last):
+  File "/usr//lib/kiwi//housekeeper.py", line 18, in <module>
+    if sys.argv[1] == "--kill":
+IndexError: list index out of range
+```
+
+If it outputs `please install psutil...`, please copy the `psutil` files to the Python path specified.
 
 If you want to allow some of the users to login the nodes without Kiwi allocation (e.g. admin users), you can add the user names to "worker_ssh_bypass" list.
 

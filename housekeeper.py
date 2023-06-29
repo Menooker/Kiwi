@@ -3,7 +3,9 @@
 try:
     import psutil
 except ImportError:
-    print("please install psutil.")
+    import sys
+
+    print("please install psutil at one of these pathes:", sys.path)
     exit(0)
 
 import time
@@ -31,28 +33,32 @@ user = sys.argv[1]
 duration = int(sys.argv[2])
 status_file = sys.argv[3]
 
+
 def update_to_allocated():
     fd = os.open(status_file, O_RDWR)
     print("open done")
     fcntl.flock(fd, fcntl.LOCK_EX)
     with open(status_file) as f:
         old_status = f.read()
-    if not old_status.startswith("init:"+user):
+    if not old_status.startswith("init:" + user):
         print("Not initializing")
         exit(1)
-    old_status = old_status[len("init:"):]
-    with open(status_file, 'w') as f:
+    old_status = old_status[len("init:") :]
+    with open(status_file, "w") as f:
         f.write(old_status)
     fcntl.flock(fd, fcntl.LOCK_UN)
     os.close(fd)
     return old_status
 
+
 old_status = update_to_allocated()
 
-with open("/tmp/kiwi-{}.pid".format(user), 'w') as f:
+with open("/tmp/kiwi-{}.pid".format(user), "w") as f:
     f.write(str(os.getpid()))
 
 wait_done = False
+
+
 def kill_process():
     to_kill = []
     for proc in psutil.process_iter():
@@ -72,23 +78,25 @@ def kill_process():
     fcntl.flock(fd, fcntl.LOCK_EX)
     with open(status_file) as f:
         new_status = f.read()
-    #double check locking
+    # double check locking
     if new_status != old_status:
         print("file changed")
         exit(0)
     spl = new_status.split(" ")
     spl[0] = "[idle]"
-    with open(status_file, 'w') as f:
+    with open(status_file, "w") as f:
         f.write(" ".join(spl))
     fcntl.flock(fd, fcntl.LOCK_UN)
     os.unlink("/tmp/kiwi-{}.pid".format(user))
 
+
 def signal_handler(sig, frame):
-    print('Early stop')
+    print("Early stop")
     if wait_done:
         return
     kill_process()
     sys.exit(0)
+
 
 signal.signal(signal.SIGUSR2, signal_handler)
 
@@ -102,5 +110,5 @@ while duration > 0:
         new_status = f.read()
     if new_status != old_status:
         exit(0)
-wait_done=True
+wait_done = True
 kill_process()
